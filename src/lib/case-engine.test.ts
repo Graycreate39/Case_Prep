@@ -1,0 +1,15 @@
+import {describe,expect,it} from "vitest";
+import {applyCaseAction,createCaseSession,evaluateCompletedCase,projectPublicCase} from "./case-engine";
+import {cases} from "./seed";
+
+describe("frozen case sessions",()=>{
+ it("pins and freezes an exact spec snapshot",()=>{const s=createCaseSession(cases[0]);expect(s.caseId).toBe(s.specSnapshot.id);expect(s.caseVersion).toBe(s.specSnapshot.version);expect(Object.isFrozen(s.specSnapshot)).toBe(true);expect(()=>{(s.specSnapshot as {title:string}).title="rewrite"}).toThrow()});
+ it("public projection never includes hidden facts or expected calculations",()=>{const s=createCaseSession(cases[0]);const json=JSON.stringify(projectPublicCase(s));expect(json).not.toContain("Incremental contribution");expect(json).not.toContain("2160000");expect(projectPublicCase(s).calculations.every(c=>!("answer" in c))).toBe(true)});
+});
+describe("case actions",()=>{
+ it("rejects invented insights and unknown calculations",()=>{const s=createCaseSession(cases[0]);expect(()=>applyCaseAction(s,{type:"submit-insight",insightId:"invented",text:"Trust me"})).toThrow();expect(()=>applyCaseAction(s,{type:"submit-calculation",calculationId:"invented",answer:1,equation:"1",unit:"USD"})).toThrow()});
+ it("does not coach during strict mode",()=>{let s=createCaseSession(cases[0],"strict");s=applyCaseAction(s,{type:"submit-calculation",calculationId:"annual",answer:1,equation:"4,000 × 300",unit:"USD"});expect(s.turns.at(-1)?.role).toBe("candidate");s=applyCaseAction(s,{type:"request-hint"});expect(s.turns.at(-1)?.text).toMatch(/does not provide coaching/)});
+ it("releases facts and exhibits only when stage prerequisites are met",()=>{let s=createCaseSession(cases[0]);s=applyCaseAction(s,{type:"advance"});expect(s.stageId).toBe("open");s=applyCaseAction(s,{type:"submit-insight",insightId:"objective",text:"We must decide whether to add the shift."});s=applyCaseAction(s,{type:"advance"});const view=projectPublicCase(s);expect(view.stageId).toBe("analysis");expect(view.facts.map(f=>f.id)).toContain("volume");expect(view.exhibits.map(e=>e.id)).toContain("capacity");});
+ it("grades units as well as values and withholds evaluation until completion",()=>{let s=createCaseSession(cases[0]);s=applyCaseAction(s,{type:"submit-calculation",calculationId:"annual",answer:2160000,equation:"4,000 × 300 × 1.8",unit:"parcels"});expect(s.calculationResults[0].correct).toBe(false);expect(()=>evaluateCompletedCase(s)).toThrow();s=applyCaseAction(s,{type:"finish"});expect(evaluateCompletedCase(s).calculationAccuracy).toBe(0)});
+ it("never mutates the prior session",()=>{const before=createCaseSession(cases[0]);const after=applyCaseAction(before,{type:"message",text:"Can I have competitor forecasts?"});expect(before.turns).toHaveLength(1);expect(after.turns.at(-1)?.text).toMatch(/unavailable/)});
+});
