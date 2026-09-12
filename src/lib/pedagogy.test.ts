@@ -1,0 +1,21 @@
+import {describe,expect,it} from "vitest";
+import {adaptChallenge,buildDailySession,calibration,humanTransferGap,isUnseenHoldout,learningProfile,markCaseSeen,nextRetryStep,readinessEvidence,scheduleReview,safeMinutes,SkillEvidence,updateReview} from "./pedagogy";
+
+const evidence=(overrides:Partial<SkillEvidence>={}):SkillEvidence=>({id:crypto.randomUUID(),skillId:"structuring",attemptId:crypto.randomUUID(),evidenceType:"INDEPENDENT",context:"retail",difficulty:2,independent:true,transferDistance:0,delayed:false,integrated:false,score:.85,guidanceLevel:1,hintsUsed:0,timestamp:"2026-09-01T00:00:00Z",...overrides});
+describe("pedagogical adaptation",()=>{
+ it("fades guidance and increases difficulty only after repeated independent success",()=>{const next=adaptChallenge({guidanceLevel:2,difficulty:2,transferDistance:0},[evidence(),evidence({context:"airline"})]);expect(next).toMatchObject({guidanceLevel:1,difficulty:3,transferDistance:1})});
+ it("restores scaffolding after repeated conceptual failure",()=>{const recent=[evidence({score:.2,errorTag:"SETUP"}),evidence({score:.3,errorTag:"CONCEPT"})];expect(adaptChallenge({guidanceLevel:1,difficulty:4,transferDistance:2},recent)).toMatchObject({guidanceLevel:2,difficulty:3,transferDistance:1})});
+ it("does not lower conceptual difficulty for one arithmetic slip",()=>{expect(adaptChallenge({guidanceLevel:1,difficulty:4,transferDistance:2},[evidence({score:.4,errorTag:"ARITHMETIC"})]).difficulty).toBe(4)});
+ it("requires independent contexts, transfer, delayed retention, and integration for mastery",()=>{const items=[evidence(),evidence({context:"airline"}),evidence({evidenceType:"TRANSFER",transferDistance:2,context:"healthcare"}),evidence({evidenceType:"RETENTION",delayed:true}),evidence({evidenceType:"INTEGRATION",integrated:true,guidanceLevel:0})];expect(learningProfile("structuring",items).stage).toBe("MASTERED");expect(learningProfile("structuring",items.filter(x=>!x.delayed)).stage).toBe("TRANSFER")});
+});
+describe("retry, retrieval, and holdouts",()=>{
+ it("uses same-segment retry before immediate and delayed transfer",()=>{expect(nextRetryStep("ATTEMPT_A")).toBe("DIAGNOSE");expect(nextRetryStep("ATTEMPT_B",true)).toBe("TRANSFER_C");expect(nextRetryStep("TRANSFER_C",true)).toBe("DELAYED_TRANSFER_D")});
+ it("expands successful reviews and contracts failures",()=>{const item=scheduleReview({id:"r",skillId:"quant-setup",underlyingErrorPattern:"SETUP",sourceAttemptId:"a",transferContext:"different industry"},new Date("2026-09-01"));const passed=updateReview(updateReview(item,true,new Date("2026-09-01")),true,new Date("2026-09-02"));expect(passed.intervalDays).toBe(3);expect(updateReview(passed,false,new Date("2026-09-03")).intervalDays).toBe(1)});
+ it("permanently removes a seen holdout from unseen eligibility",()=>{const fresh={caseId:"h",poolRole:"READINESS_HOLDOUT" as const,seenCount:0};expect(isUnseenHoldout(fresh)).toBe(true);expect(isUnseenHoldout(markCaseSeen(fresh,"2026-09-01"))).toBe(false)});
+ it("excludes assisted training from readiness",()=>{expect(readinessEvidence([evidence({evidenceType:"INTEGRATION",integrated:true,guidanceLevel:2})],true)).toBeNull();expect(readinessEvidence([evidence({evidenceType:"INTEGRATION",integrated:true,guidanceLevel:0})],true)).toBe(.85);expect(readinessEvidence([evidence({evidenceType:"INTEGRATION",integrated:true,guidanceLevel:0})],false)).toBeNull()});
+});
+describe("planning and calibration",()=>{
+ it("never emits NaN and uses diverse activities",()=>{const plan=buildDailySession([{id:"a",skillId:"quant-setup",title:"Review",minutes:undefined,type:"RETRIEVAL",priority:3,why:"due",noveltyGroup:"setup"},{id:"b",skillId:"structuring",title:"Case link",minutes:12,type:"INTEGRATED",priority:2,why:"gap",noveltyGroup:"retail"}],60);expect(Number.isFinite(plan.totalMinutes)).toBe(true);expect(plan.items).toHaveLength(2);expect(safeMinutes(Number.NaN)).toBe(8)});
+ it("defaults invalid duration rather than propagating it",()=>expect(buildDailySession([],Number.NaN).targetMinutes).toBe(30));
+ it("detects confidence mismatch and human transfer gaps",()=>{expect(calibration("HIGH",.2)).toBe("OVERCONFIDENT");expect(humanTransferGap(.9,[2,3])?.message).toContain("case segments")});
+});

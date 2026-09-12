@@ -1,0 +1,11 @@
+import {expect,test} from "@playwright/test";
+test.beforeEach(async({page})=>{await page.goto("/");await page.evaluate(()=>localStorage.clear());await page.reload()});
+async function onboard(page:import("@playwright/test").Page){await page.getByRole("button",{name:"Continue"}).click();await page.getByRole("button",{name:/Set training cadence/}).click();await page.getByRole("button",{name:/Build my diagnostic/}).click()}
+test("duration-safe plan, spiral Story Mode, retry, verbal mode, and holdout isolation",async({page})=>{
+ const errors:string[]=[];page.on("console",message=>{if(message.type()==="error")errors.push(message.text())});await onboard(page);
+ await expect(page.getByText("30-minute focused session")).toBeVisible();await page.getByLabel("Plan duration").selectOption("60");await expect(page.getByText("60-minute focused session")).toBeVisible();await expect(page.getByText(/NaN/)).toHaveCount(0);
+ await page.getByRole("button",{name:"Story mode"}).click();await expect(page.getByText(/Case Link · the complete case flow/i)).toBeVisible();await page.getByPlaceholder(/Commit to your reasoning/).fill("I would clarify the client's success metric and timing.");await page.getByRole("button",{name:/Reveal expert reasoning/}).click();await expect(page.getByText(/prevent technically correct but irrelevant/)).toBeVisible();
+ await page.getByRole("button",{name:"Skill lab"}).click();await page.getByPlaceholder("Enter a number").fill("2");await page.getByRole("button",{name:"Evaluate response"}).click();await expect(page.getByText(/Needs another pass/)).toBeVisible();await page.getByRole("button",{name:/Redo the same segment/}).click();await page.getByPlaceholder("Enter a number").fill("25");await page.getByRole("button",{name:"Evaluate response"}).click();await expect(page.getByText(/Strong evidence/)).toBeVisible();
+ await page.getByRole("button",{name:"Structuring"}).click();await expect(page.getByText("Answer aloud")).toBeVisible();
+ await page.getByRole("button",{name:"Case room"}).click();await expect(page.getByText("Unseen readiness assessment")).toHaveCount(0);await page.getByRole("button",{name:"readiness"}).click();await expect(page.getByText("Unseen readiness assessment")).toBeVisible();expect(errors).toEqual([]);
+});
