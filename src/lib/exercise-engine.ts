@@ -1,0 +1,15 @@
+import type { Exercise } from "./catalog";
+import {gradeNumber} from "./domain";
+export type ExerciseFeedback={score:1|2|3|4|5;correct:boolean;evidence:string[];errorTags:string[];improvement:string};
+const words=(text:string)=>text.toLowerCase().split(/[^a-z0-9%]+/).filter(Boolean);
+export function evaluateExercise(exercise:Exercise,response:string):ExerciseFeedback{
+ if(typeof exercise.answer==="number"){
+  const result=gradeNumber(response,exercise.answer,exercise.tolerance??0),{value,error,correct,roundingMatch,decimals}=result;
+  return {score:result.score as 1|2|3|4|5,correct,evidence:[`Submitted ${response}`,correct&&roundingMatch&&error>(exercise.tolerance??0)?`Correctly rounded to ${decimals===0?"a whole number":`${decimals} decimal place${decimals===1?"":"s"}`}`:`Checked with ±${exercise.tolerance??0} precision`],errorTags:correct?[]:[Number.isFinite(value)?"ARITHMETIC":"PROCESS"],improvement:correct?"Correct. Now state what the result means for the client decision.":Number.isFinite(value)?"Your approach is close, but the value does not match at the precision you supplied. Recheck the arithmetic.":"Enter a numeric result after defining the equation and units."};
+ }
+ const tokens=words(response),hasPriority=/\b(first|priority|prioritize|start with|most important)\b/i.test(response),hasImplication=/\b(therefore|implies|means|so that|client should|because)\b/i.test(response),hasStructure=/\b(first|second|third|1\.|2\.|revenue|cost|customer|competition|capability)\b/i.test(response);
+ const setupMissing=exercise.kind==="quant-setup"&&!/[÷×+\-*\/]|(fixed|variable|revenue|cost|volume|price|capacity)/i.test(response),unitMissing=exercise.kind==="quant-setup"&&!/\b(unit|usd|dollar|percent|%|customer|year|month|day|seat|visit)s?\b/i.test(response);
+ const dimensions=[tokens.length>=(exercise.minimumWords??35),exercise.kind==="quant-setup"?!setupMissing:hasPriority,hasImplication,hasStructure],score=Math.max(1,Math.min(5,1+dimensions.filter(Boolean).length)) as 1|2|3|4|5;
+ const errors=[...(setupMissing?["SETUP"]:[]),...(unitMissing?["UNIT"]:[]),...(tokens.length<(exercise.minimumWords??35)?["COMMUNICATION"]:[]),...(!hasPriority&&exercise.kind!=="quant-setup"?["PRIORITIZATION"]:[]),...(!hasImplication?["INTERPRETATION"]:[]),...(!hasStructure?["STRUCTURE"]:[])];
+ return {score,correct:score>=4&&!setupMissing&&!unitMissing,evidence:[`${tokens.length} words`,setupMissing?"Equation missing":hasPriority?"Priority stated":"No priority stated",hasImplication?"Implication stated":"No implication stated"],errorTags:errors,improvement:setupMissing?"Define the decision quantity and equation before calculating.":unitMissing?"Carry units through the equation so the result can be checked.":!hasStructure?"Organize the response into distinct, decision-relevant branches.":!hasPriority&&exercise.kind!=="quant-setup"?"Name which branch you would investigate first and why.":!hasImplication?"Connect the analysis to what the client should do next.":tokens.length<(exercise.minimumWords??35)?"Add one level of tailored detail without losing concision.":"Strong response; now test it in a different industry."};
+}

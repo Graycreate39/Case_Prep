@@ -1,0 +1,12 @@
+import {describe,expect,it} from "vitest";
+import {assessWelcomeResponse,isNumericAnswer,northstarTruth,welcomeObservations} from "./welcome-case";
+import {completeWelcomeCase,initialLearner,loadLearner} from "./learner";
+describe("Northstar Coffee welcome case",()=>{
+ it("reconciles every numeric ground-truth value",()=>{const t=northstarTruth;expect(t.weekdayTransactions*t.weekdays+t.weekendTransactions*t.weekendDays).toBe(t.weeklyTransactions);expect(t.weeklyTransactions*t.weeks).toBe(t.annualTransactions);expect(t.annualTransactions*t.averageTicket).toBe(t.annualRevenue);expect(t.annualRevenue*t.variableCostRate).toBe(t.variableCosts);expect(t.annualRevenue-t.variableCosts).toBe(t.contribution);expect(t.contribution-t.fixedCosts).toBe(t.operatingProfit);expect(t.operatingProfit-t.profitTarget).toBe(t.targetSurplus)});
+ it("accepts formatted numeric answers but not unrelated values",()=>{expect(isNumericAnswer("$1,539,200",northstarTruth.annualRevenue,1)).toBe(true);expect(isNumericAnswer("350480",northstarTruth.operatingProfit,1)).toBe(true);expect(isNumericAnswer("36%",northstarTruth.operatingProfit,1)).toBe(false)});
+ it("accepts plain-language recommendations",()=>{expect(assessWelcomeResponse("recommendation","Yes, open it: profit is $350K, above target. Check office traffic before signing the lease.")).toBe(2)});
+ it("records only guided calibration and never mastery",()=>{const state=initialLearner();state.welcomeCase.signals=[{skillId:"quant-setup",quality:2},{skillId:"recommendation",quality:2}];const done=completeWelcomeCase(state);expect(done.evidence.every(x=>x.evidenceType==="ACQUISITION"&&!x.independent&&!x.integrated&&!x.delayed&&x.transferDistance===0&&x.guidanceLevel===4)).toBe(true);expect(done.skills.every(x=>x.mastery===0)).toBe(true)});
+ it("limits behavior-based observations",()=>{expect(welcomeObservations([{skillId:"quant-setup",quality:0,hinted:true},{skillId:"problem-definition",quality:0},{skillId:"recommendation",quality:2}])).toHaveLength(3)});
+ it("satisfies onboarding for established returning users",()=>{const old={...initialLearner(),version:6,welcomeCase:undefined,attempts:Array.from({length:5},(_,i)=>({id:String(i)}))};expect(loadLearner(JSON.stringify(old)).state.welcomeCase.status).toBe("COMPLETED")});
+ it("keeps a genuinely fresh migrated learner at the welcome case",()=>{const old={...initialLearner(),version:6,welcomeCase:undefined};expect(loadLearner(JSON.stringify(old)).state.welcomeCase.status).toBe("NOT_STARTED")});
+});
