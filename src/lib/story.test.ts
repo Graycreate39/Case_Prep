@@ -1,0 +1,13 @@
+import {describe,expect,it} from "vitest";
+import {chapterEvidence,getNextStoryActivity,recordStoryActivity,storyChapterPlans,storyStatus,type StoryActivityRecord} from "./story";
+const done=(activityId:string,chapterId:string,score=.9):StoryActivityRecord=>({activityId,chapterId,status:"COMPLETED",score,completedAt:"2026-09-12T12:00:00Z"});
+describe("Story Mode orchestration",()=>{
+ it("authors an executable ordered plan for every chapter",()=>{expect(storyChapterPlans).toHaveLength(16);for(const plan of storyChapterPlans){expect(plan.activities.length).toBeGreaterThanOrEqual(3);for(let i=1;i<plan.activities.length;i++)expect(plan.activities[i].prerequisites).toContain(plan.activities[i-1].id)}});
+ it("starts a fresh learner at the exact Chapter 0 client prompt",()=>{const plan=storyChapterPlans[0],next=getNextStoryActivity(plan,[],[]);expect(next?.id).toBe("case-fundamentals:brief");expect(next?.title).toBe("Receive the client prompt")});
+ it("advances to the exact next activity rather than a generic category",()=>{const plan=storyChapterPlans[1],records=[done(plan.activities[0].id,plan.id),done(plan.activities[1].id,plan.id)];expect(getNextStoryActivity(plan,records,[])?.exerciseId).toBe("setup-1")});
+ it("branches a failed setup activity into targeted remediation",()=>{const plan=storyChapterPlans[3],source=plan.activities[2],records=[...plan.activities.slice(0,2).map(x=>done(x.id,plan.id)),{...done(source.id,plan.id,.2),status:"REMEDIATION_REQUIRED" as const,errorTag:"SETUP" as const}];const next=getNextStoryActivity(plan,records,[]);expect(next?.id).toContain("remediation");expect(next?.exerciseId).toBe(source.exerciseId);expect(next?.guidance).toBeGreaterThan(source.guidance)});
+ it("distinguishes provisional competence from retained mastery",()=>{const plan=storyChapterPlans[1],records=plan.activities.filter(x=>x.gateContribution).map(x=>done(x.id,plan.id));const evidence=chapterEvidence(plan,records);expect(evidence.competent).toBe(true);expect(evidence.mastered).toBe(false);expect(storyStatus(plan,records)).toBe("RETENTION_PENDING")});
+ it("deduplicates repeated completion records",()=>{const plan=storyChapterPlans[0],record=done(plan.activities[0].id,plan.id);expect(recordStoryActivity(recordStoryActivity([],record),record)).toHaveLength(1)});
+ it("keeps manual bypass visibly distinct from mastery",()=>expect(storyStatus(storyChapterPlans[0],[],true)).toBe("MANUALLY_BYPASSED"));
+ it("uses dedicated Case Link prompts in early chapters",()=>storyChapterPlans.slice(0,8).forEach(plan=>{const link=plan.activities.find(x=>x.kind==="CASE_LINK");expect(link?.prompt?.length).toBeGreaterThan(40);expect(link?.exerciseId).toBeUndefined()}));
+});

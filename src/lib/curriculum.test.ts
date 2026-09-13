@@ -1,0 +1,4 @@
+import {describe,expect,it} from "vitest";
+import {chapters} from "./domain";
+import {chapterLessons} from "./curriculum";
+describe("Story Mode curriculum",()=>{it("provides active instruction and a gate for every chapter",()=>{expect(chapterLessons).toHaveLength(chapters.length);for(const chapter of chapters){const lesson=chapterLessons.find(x=>x.chapterId===chapter[0]);expect(lesson?.concept.length).toBeGreaterThan(30);expect(lesson?.workedExample.length).toBeGreaterThan(30);expect(lesson?.predictionPrompt).toContain("?");expect(lesson?.expertReveal.length).toBeGreaterThan(30);expect(lesson?.practiceSequence.length).toBeGreaterThanOrEqual(3);expect(lesson?.gate.length).toBeGreaterThan(20)}});it("spirals chapters 0–7 into integrated Case Links",()=>chapterLessons.slice(0,8).forEach(lesson=>{expect(lesson.caseLink.title).toMatch(/Case Link/);expect(lesson.caseLink.skills.length).toBeGreaterThan(1);expect(lesson.caseLink.estimatedMinutes).toBeGreaterThan(0)}))});
